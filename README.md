@@ -14,6 +14,12 @@ A high-performance, real-time GPU radiance caching and global illumination raytr
 
 ---
 
+V4 will include:
+1: My volumetric atmosphere and cloud sim
+2: Proper sky rendering
+3: Bounce lighting on Spot lights
+4: Minor shadow fix
+
 ### Acknowledgments
 
 - **Gemini 3.8 Flash** for fast prototyping & architectural formulation. ([codex-session-SQL Radiance V2 and V3 Analysis.md](codex-session-SQL%20Radiance%20V2%20and%20V3%20Analysis.md))
