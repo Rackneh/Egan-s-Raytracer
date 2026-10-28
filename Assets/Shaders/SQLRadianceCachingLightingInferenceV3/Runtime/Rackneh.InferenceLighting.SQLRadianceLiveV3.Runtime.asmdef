@@ -1,0 +1,7 @@
+{
+  "name": "Rackneh.InferenceLighting.SQLRadianceLiveV3.Runtime",
+  "references": [
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Core.Runtime"
+  ]
+}

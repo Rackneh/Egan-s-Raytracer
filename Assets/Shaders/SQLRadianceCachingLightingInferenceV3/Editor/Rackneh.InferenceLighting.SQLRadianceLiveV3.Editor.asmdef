@@ -1,0 +1,12 @@
+{
+  "name": "Rackneh.InferenceLighting.SQLRadianceLiveV3.Editor",
+  "references": [
+    "Rackneh.InferenceLighting.SQLRadianceLiveV3.Runtime",
+    "Rackneh.InferenceLighting.SQLRadiance.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Core.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

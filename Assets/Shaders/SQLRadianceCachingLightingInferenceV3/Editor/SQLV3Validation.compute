@@ -1,0 +1,13 @@
+#pragma kernel Trace
+#define SQL3_BUFFER_LIGHTING 1
+#include "../Runtime/Shaders/SQLV3Scene.hlsl"
+StructuredBuffer<float4> Rays;
+RWStructuredBuffer<float4> Results;
+int RayCount;
+[numthreads(64,1,1)]
+void Trace(uint id:SV_DispatchThreadID)
+{
+    if(id>=(uint)RayCount) return;
+    SQL3Hit h; bool found=SQL3Trace(Rays[id*2].xyz,normalize(Rays[id*2+1].xyz),1000,false,h);
+    Results[id]=float4(h.position,found ? h.entity+1:0);
+}

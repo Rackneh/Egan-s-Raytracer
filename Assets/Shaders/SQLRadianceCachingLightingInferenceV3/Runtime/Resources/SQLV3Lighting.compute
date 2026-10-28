@@ -1,0 +1,119 @@
+#pragma kernel CopyCache
+#pragma kernel UpdateCache
+#define SQL3_BUFFER_LIGHTING 1
+#include "../Shaders/SQLV3Scene.hlsl"
+RWStructuredBuffer<SQL3Lighting> _SQL3WriteCache;
+RWTexture2DArray<float4> _SQL3WriteAtlas;
+float4 _SQL3Lights[192]; // position/type; color/range; forward/outerCos; right/width; up/height; innerCos/shadowStrength/layerMask/bounce
+int _SQL3LightCount, _SQL3SampleCount, _SQL3UpdateStart, _SQL3UpdateCount, _SQL3Iteration, _SQL3GISamples;
+float _SQL3HistoryWeight;
+float2 SQL3Sequence(uint index)
+{
+    return frac(float2(index*.754877666,index*.569840296));
+}
+float SQL3Visibility(float3 p,float3 n,float3 dir,float distance,float strength)
+{
+    if(strength<=0) return 1;
+    SQL3Hit h;
+    return SQL3Trace(p+n*_SQL3Bias,dir,max(distance-_SQL3Bias,0),true,h) ? 1-strength : 1;
+}
+float3 SQL3Direct(float3 p,float3 normal,int entity,out float3 area,out float3 dominantDirection,out float3 dominantRadiance)
+{
+    float3 result=0; area=0; dominantDirection=normal; dominantRadiance=0; float strongest=0;
+    [loop] for(int i=0;i<_SQL3LightCount;i++)
+    {
+        float4 p0=_SQL3Lights[i*6],c=_SQL3Lights[i*6+1],f=_SQL3Lights[i*6+2];
+        float4 right=_SQL3Lights[i*6+3],up=_SQL3Lights[i*6+4],options=_SQL3Lights[i*6+5];
+        if((asuint(options.z)&(1u<<(uint)_SQL3Metadata[entity].w))==0) continue;
+        int type=(int)p0.w, count=type>=3 ? 4 : 1;
+        [loop] for(int sampleIndex=0;sampleIndex<count;sampleIndex++)
+        {
+            float3 lp=p0.xyz;
+            if(type>=3)
+            {
+                float2 u=SQL3Sequence((uint)(_SQL3Iteration*4+sampleIndex+1));
+                float2 offset=(u-.5)*float2(right.w,up.w);
+                if(type==4) offset=float2(cos(u.x*TWO_PI),sin(u.x*TWO_PI))*sqrt(u.y)*right.w*.5;
+                lp+=right.xyz*offset.x+up.xyz*offset.y;
+            }
+            float3 delta=lp-p; float dist=length(delta);
+            float3 dir=type==0 ? -f.xyz : delta/max(dist,1e-5);
+            float ndl=saturate(dot(normal,dir)); if(ndl==0) continue;
+            float attenuation=1;
+            if(type!=0)
+            {
+                float rangeFade=saturate(1-pow(dist/max(c.w,.001),4));
+                attenuation=rangeFade*rangeFade/max(dist*dist,.01);
+                if(type==2) { float cone=saturate((dot(f.xyz,-dir)-f.w)/max(options.x-f.w,1e-4)); attenuation*=cone*cone; }
+                if(type>=3) attenuation*=saturate(dot(f.xyz,-dir))*(type==4 ? PI*right.w*right.w*.25 : right.w*up.w)/count;
+            }
+            if(attenuation<=0) continue;
+            float vis=SQL3Visibility(p,normal,dir,type==0 ? 10000 : dist, options.y*_SQL3SurfaceFlags[entity].z);
+            float3 light=c.rgb*(ndl*attenuation*vis/PI);
+            result+=light; if(type>=3) area+=light;
+            float energy=dot(light,float3(.2126,.7152,.0722));
+            if(energy>strongest) {strongest=energy;dominantDirection=dir;dominantRadiance=c.rgb*(attenuation*vis);}
+        }
+    }
+    return result;
+}
+[numthreads(64,1,1)]
+void CopyCache(uint id:SV_DispatchThreadID)
+{
+    if(id<(uint)_SQL3SampleCount) _SQL3WriteCache[id]=_SQL3Cache[id];
+}
+[numthreads(64,1,1)]
+void UpdateCache(uint thread:SV_DispatchThreadID)
+{
+    if(thread>=(uint)_SQL3UpdateCount || _SQL3SampleCount==0) return;
+    uint id=(_SQL3UpdateStart+thread)%_SQL3SampleCount;
+    SQL3Vertex vertex=_SQL3Vertices[id]; int entity=(int)vertex.position.w;
+    SQL3Lighting output=(SQL3Lighting)0;
+    if(_SQL3SurfaceFlags[entity].x==0) { _SQL3WriteCache[id]=output; return; }
+    float3 p=vertex.position.xyz,n=normalize(vertex.normal.xyz),area,dominantDirection,dominantRadiance;
+    output.direct=float4(SQL3Direct(p,n,entity,area,dominantDirection,dominantRadiance),1); output.area=float4(area,1);
+    output.dominantDirection=float4(dominantDirection,1); output.dominantRadiance=float4(dominantRadiance,1);
+    float3 tangent=normalize(cross(abs(n.y)<.99 ? float3(0,1,0):float3(1,0,0),n));
+    float3 bitangent=cross(n,tangent), incoming=0;
+    if(_SQL3GIEnabled>0)
+    {
+        [loop] for(int s=0;s<_SQL3GISamples;s++)
+        {
+            float2 uv=SQL3Sequence(id*17+_SQL3Iteration*_SQL3GISamples+s+1);
+            float r=sqrt(uv.x),phi=uv.y*TWO_PI;
+            float3 dir=tangent*(r*cos(phi))+bitangent*(r*sin(phi))+n*sqrt(1-uv.x);
+            SQL3Hit hit;
+            if(SQL3Trace(p+n*_SQL3Bias,dir,10000,false,hit))
+            {
+                float3 albedo,emission; SQL3Material(hit,albedo,emission);
+                SQL3Lighting cached=SQL3SampleLighting(hit);
+                float metallic=_SQL3Entities[hit.entity*6+3].x;
+                // Diffuse transport is a spatial fixed point: L = E + rho * (D + T L).
+                // Each dispatch advances one iteration, independent of mirror depth.
+                incoming+=emission+min(albedo,.95)*(1-metallic)*.96*(cached.direct.rgb+cached.indirect.rgb);
+            }
+            else incoming+=_SQL3Sky.rgb;
+        }
+        incoming/=max(1,_SQL3GISamples);
+    }
+    output.indirect=float4(incoming,1);
+    SQL3Lighting previous=_SQL3Cache[id];
+    // Direct punctual shadows respond immediately on refresh. Monte Carlo terms accumulate.
+    float history=previous.indirect.w>0 ? _SQL3HistoryWeight : 0;
+    output.indirect.rgb=lerp(output.indirect.rgb,previous.indirect.rgb,history);
+    if(_SQL3GIEnabled==0) output.indirect.rgb=0;
+    float3 stableArea=lerp(area,previous.area.rgb,history);
+    output.direct.rgb+=stableArea-area; output.area.rgb=stableArea;
+    _SQL3WriteCache[id]=output;
+    if(_SQL3Entities[entity*6].w<4)
+    {
+        uint local=id-(uint)_SQL3Metadata[entity].x;
+        uint2 pixel=uint2((local/64)*8+local%8,entity*8+(local%64)/8);
+        _SQL3WriteAtlas[uint3(pixel,0)]=output.direct;
+        _SQL3WriteAtlas[uint3(pixel,1)]=output.indirect;
+        _SQL3WriteAtlas[uint3(pixel,2)]=output.area;
+        _SQL3WriteAtlas[uint3(pixel,3)]=output.dominantDirection;
+        _SQL3WriteAtlas[uint3(pixel,4)]=output.dominantRadiance;
+    }
+}
+
