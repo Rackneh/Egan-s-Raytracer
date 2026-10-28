@@ -9,7 +9,7 @@ A high-performance, real-time GPU radiance caching and global illumination raytr
   <br>
   <em>Live in-engine footage showcasing real-time multi-bounce recursive reflections and dynamic radiance caching.</em>
   <br><br>
-  <a href="./Preview.mp4">🎬 <b>Click here to view / download the full 44-second demonstration video (Preview.mp4)</b></a>
+  
 </p>
 
 ---
