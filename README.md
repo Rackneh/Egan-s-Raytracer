@@ -7,8 +7,11 @@ A high-performance, real-time GPU radiance caching and global illumination raytr
 
 Thanks to: 
 
+
 Gemini 3.8 Flash for fast prototyping. (codex-session-SQL Radiance V2 and V3 Analysis.md)
+
 Astra for making it Realtime.
+
 Me for the idea
 
 
