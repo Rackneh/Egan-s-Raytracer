@@ -4,16 +4,21 @@ A high-performance, real-time GPU radiance caching and global illumination raytr
 
 **Egan's Raytracer (SQL Radiance Live V3)** provides fully dynamic, real-time multi-bounce diffuse global illumination, infinite and multi-bounce specular reflections, real-time area lights, and dynamic raytraced shadow occlusion without offline baking, precomputed lightmaps, or raytracing hardware (RTX/DXR) requirements.
 
+<p align="center">
+  <img src="preview.gif" alt="Egan's Raytracer Live Demonstration" width="100%">
+  <br>
+  <em>Live in-engine footage showcasing real-time multi-bounce recursive reflections and dynamic radiance caching.</em>
+  <br><br>
+  <a href="./Preview.mp4">🎬 <b>Click here to view / download the full 44-second demonstration video (Preview.mp4)</b></a>
+</p>
 
-Thanks to: 
+---
 
+### Acknowledgments
 
-Gemini 3.8 Flash for fast prototyping. (codex-session-SQL Radiance V2 and V3 Analysis.md)
-
-Astra for making it Realtime.
-
-Me for the idea
-
+- **Gemini 3.8 Flash** for fast prototyping & architectural formulation. ([codex-session-SQL Radiance V2 and V3 Analysis.md](codex-session-SQL%20Radiance%20V2%20and%20V3%20Analysis.md))
+- **Astra** for making it Realtime.
+- **Me** for the original hypothesis and core concept.
 
 ---
 
